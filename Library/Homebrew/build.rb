@@ -13,19 +13,6 @@ at_exit do
   error_pipe = nil
 
   begin
-    raise $! if $! # an exception was already thrown when parsing the formula
-
-    require 'hardware'
-    require 'keg'
-    require 'superenv'
-
-    ENV.setup_build_environment
-
-    # Force any future invocations of sudo to require the user's password to be
-    # re-entered. This is in-case any build script call sudo. Certainly this is
-    # can be inconvenient for the user. But we need to be safe.
-    system "/usr/bin/sudo -k"
-
     # The main Homebrew process expects to eventually see EOF on the error
     # pipe in FormulaInstaller#build. However, if any child process fails to
     # terminate (i.e, fails to close the descriptor), this won't happen, and
@@ -37,6 +24,17 @@ at_exit do
       error_pipe = IO.new(ENV['HOMEBREW_ERROR_PIPE'].to_i, 'w')
       error_pipe.fcntl(Fcntl::F_SETFD, Fcntl::FD_CLOEXEC)
     end
+
+    raise $! if $! # an exception was already thrown when parsing the formula
+
+    require 'hardware'
+    require 'keg'
+    require 'superenv'
+
+    # Force any future invocations of sudo to require the user's password to be
+    # re-entered. This is in-case any build script call sudo. Certainly this is
+    # can be inconvenient for the user. But we need to be safe.
+    system "/usr/bin/sudo -k"
 
     install(Formula.factory($0))
   rescue Exception => e
@@ -53,6 +51,8 @@ at_exit do
 end
 
 def install f
+  ENV.setup_build_environment
+
   f.recursive_requirements.each { |req| req.modify_build_environment }
 
   f.recursive_deps.uniq.each do |dep|
@@ -65,7 +65,6 @@ def install f
       ENV.prepend_path 'PATH', "#{opt}/bin"
       ENV.prepend_path 'PKG_CONFIG_PATH', "#{opt}/lib/pkgconfig"
       ENV.prepend_path 'PKG_CONFIG_PATH', "#{opt}/share/pkgconfig"
-      ENV.prepend_path 'CMAKE_PREFIX_PATH', opt
 
       if superenv?
         ENV.prepend 'HOMEBREW_DEP_PREFIXES', dep.name
@@ -73,6 +72,7 @@ def install f
         ENV.prepend 'LDFLAGS', "-L#{opt}/lib" if (opt/:lib).directory?
         ENV.prepend 'CPPFLAGS', "-I#{opt}/include" if (opt/:include).directory?
         ENV.prepend_path 'ACLOCAL_PATH', "#{opt}/share/aclocal"
+        ENV.prepend_path 'CMAKE_PREFIX_PATH', opt
       end
     end
   end
